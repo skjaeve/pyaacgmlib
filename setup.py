@@ -1,23 +1,24 @@
 #!/usr/bin/env python
+# coding: utf-8
 
 """
-setup.py file for SWIG example
+setup.py file for AACGM_v2 SWIG bindings and wrapper functions
 """
 
 from distutils.core import setup, Extension
 
 
-aacgmlib_v2_module = Extension('aacgmlib_v2',
-                           sources=['aacgmlib_v2/aacgmlib_v2.c', 'aacgmlib_v2/aacgmlib_v2.i'],
+aacgmlib_v2_module = Extension('_aacgmlib_v2',
+                           sources=['aacgm/aacgmlib_v2.c', 'aacgm/aacgmlib_v2.i'],
                            )
 
-setup (packages = ['aacgmlib_v2'], 
-       package_dir = {'aacgmlib_v2': 'aacgmlib_v2'},
-       package_data = {'aacgmlib_v2': ['coeffs']},
-#       name = 'aacgmlib_v2',
-#       version = '0.1',
-#       author      = "SWIG Docs",
-#       description = """Simple Python interface to aacgm_v2 module""",
+setup (packages = ['aacgm'], 
+       package_dir = {'aacgm': 'aacgm'},
+       package_data = {'aacgm': ['coeffs/*']},
+       name = 'aacgm',
+       version = '0.1',
+       author      = "Åsmund Steen Skjæveland",
+       description = """Simple Python interface to aacgm_v2 module""",
        ext_modules = [aacgmlib_v2_module],
-#       py_modules = ["aacgmlib_v2"],
+       #py_modules = ["aacgm"],
        )
