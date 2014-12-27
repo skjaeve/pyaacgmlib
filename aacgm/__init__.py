@@ -50,13 +50,14 @@ def getDateTime():
     return (status, dt, INT(daynoP))
 
 def geo2aacgm(datetime, lons, lats, alts, Re = 6371.0, reversed = False):
-
-    aacgmlib_v2.AACGM_v2_SetDateTime(datetime.year, datetime.month,
-                                     datetime.day, datetime.hour, datetime.minute, datetime.second)
-
     """Call AAGCM library method to compute AACGM coordinates from GEO or
     reversed. Must supply a datetime object to set the AACGM library
     internal time. Data can be in flat sequence form or Numpy arrays."""
+
+    # Initialise library datetime
+    aacgmlib_v2.AACGM_v2_SetDateTime(datetime.year, datetime.month,
+                                     datetime.day, datetime.hour,
+                                     datetime.minute, datetime.second)
 
     # Direction of coordinate conversion. 0 = geo -> aacgm, 1 = aacgm -> geo
     if reversed:
@@ -87,9 +88,9 @@ def geo2aacgm(datetime, lons, lats, alts, Re = 6371.0, reversed = False):
 
 
     # C pointers: coordinate coefficients
-    lat_out=aacgmlib_v2.new_doublep()
-    lon_out=aacgmlib_v2.new_doublep()
-    r=aacgmlib_v2.new_doublep()
+    lat_out = aacgmlib_v2.new_doublep()
+    lon_out = aacgmlib_v2.new_doublep()
+    r = aacgmlib_v2.new_doublep()
     # The variable r is included as a return value but will always be 1.0.
     
     for i in range(len(llons)):
@@ -107,3 +108,9 @@ def geo2aacgm(datetime, lons, lats, alts, Re = 6371.0, reversed = False):
         return numpy.reshape(result_llons, lons.shape), numpy.reshape(result_llats, lats.shape)
     except:
         return result_llons, result_llats
+
+def aacgm2geo(datetime, lons, lats, alts, Re = 6371.0):
+    """Convenience function to call geo2aacgm() with reversed flag set,
+    for slightly more readable code."""
+
+    return geo2aacgm(datetime, lons, lats, alts, Re, reversed=True)

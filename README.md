@@ -13,7 +13,7 @@ updated versions.
 There are wrapper functions in \_\_init\_\_.py to avoid the hassle of C
 pointers. The main function is:
 
-  *geo2aacgm(_datetime_, _lons_, _lats_, _alts_, Re = 6371.0, reversed = False)*
+    *geo2aacgm(__datetime__, __lons__, __lats__, __alts__, Re = 6371.0, reversed = False)*
 
 datetime: a Python datetime object.
 
@@ -27,3 +27,10 @@ Reversed: If False: convert geo -> aacgm. True: aacgm -> geo.
 Return value: Arrays of converted (lon, lat). If input was numpy
 arrays, returned arrays are numpy arrays of the same shape. If input
 was Python sequence, flat lists will be returned.
+
+There's also a function _aacgm2geo(…)_ which simply calls
+_geo2aacgm(…)_ with the _reversed_ flag set.
+
+Note that the C source uses (lat,lon) order. I prefer (lon,lat), so
+that's what the wrapper code uses.
+
