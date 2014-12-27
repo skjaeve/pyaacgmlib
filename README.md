@@ -8,12 +8,18 @@ possible.  The C code and coefficient files (version 20140918) are
 duplicated in this repository, but please check the source for more
 updated versions.
 
-## usage
+## Installation
+
+    python setup.py install
+
+I recommend you test it in a *virtualenv* first.
+
+## Usage
 
 There are wrapper functions in \_\_init\_\_.py to avoid the hassle of C
 pointers. The main function is:
 
-    *geo2aacgm(__datetime__, __lons__, __lats__, __alts__, Re = 6371.0, reversed = False)*
+    geo2aacgm(datetime, lons, lats, alts, Re = 6371.0, reversed = False)
 
 datetime: a Python datetime object.
 
