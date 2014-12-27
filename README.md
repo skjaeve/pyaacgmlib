@@ -4,8 +4,9 @@ This is a Python wrapper for the Altitude Adjusted Corrected
 Geomagnetic Coordinates (AACGM) C implementation found at
 https://engineering.dartmouth.edu/superdarn/aacgm.html. License is
 undetermined, please assume same as the C code found at above URL if
-possible.  The C code and coefficient files are duplicated in this
-repository, but please check the source for more updated versions.
+possible.  The C code and coefficient files (version 20140918) are
+duplicated in this repository, but please check the source for more
+updated versions.
 
 ## usage
 
