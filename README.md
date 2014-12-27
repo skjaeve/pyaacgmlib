@@ -10,10 +10,10 @@ updated versions.
 
 ## usage
 
-There are wrapper functions in __init__.py to avoid the hassle of C
+There are wrapper functions in \_\_init\_\_.py to avoid the hassle of C
 pointers. The main function is:
 
-  *geo2aacgm(datetime, lons, lats, alts, Re = 6371.0, reversed = False)*
+  *geo2aacgm(_datetime_, _lons_, _lats_, _alts_, Re = 6371.0, reversed = False)*
 
 datetime: a Python datetime object.
 
