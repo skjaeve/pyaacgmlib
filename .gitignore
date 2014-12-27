@@ -1,0 +1,5 @@
+*.pyc
+*~
+aacgm/aacgmlib_v2_wrap.c
+aacgm/aacgmlib_v2.py
+build/
