@@ -10,9 +10,19 @@ updated versions.
 
 ## Installation
 
+Install SWIG if you don't already have it, for example
+
+    sudo aptitude install swig
+
+then install the library:
+
+    python setup.py install --user
+
+Or if you're in a virtualenv:
+
     python setup.py install
 
-I recommend you test it in a *virtualenv* first.
+I have not been able to make the bindings work in Python 3 yet.
 
 ## Usage
 
@@ -40,3 +50,6 @@ _geo2aacgm(…)_ with the _reversed_ flag set.
 Note that the C source uses (lat,lon) order. I prefer (lon,lat), so
 that's what the wrapper code uses.
 
+Other functions: _setNow()_, _setDateTime(**datetime**)_,
+_getDateTime()_ exist but aren't really needed, unless you're going to
+bypass the wrapper functions and use the C functions directly.

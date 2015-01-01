@@ -45,7 +45,7 @@ def getDateTime():
 
     status = aacgmlib_v2.AACGM_v2_GetDateTime(yearP, monthP, dayP, hourP, minuteP, secondP, daynoP)
     
-    dt = datetime.datetime(INT(yearP), INT(minuteP), INT(dayP), INT(hourP), INT(minuteP), INT(secondP))
+    dt = datetime.datetime(INT(yearP), INT(monthP), INT(dayP), INT(hourP), INT(minuteP), INT(secondP))
 
     return (status, dt, INT(daynoP))
 
