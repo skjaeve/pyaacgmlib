@@ -8,6 +8,9 @@ possible.  The C code and coefficient files (version 20140918) are
 duplicated in this repository, but please check the source for more
 updated versions.
 
+The wrappers should work in Python 2.7 and Python 3.4. Haven't tested
+other versions.
+
 ## Installation
 
 Install SWIG if you don't already have it, for example
@@ -21,8 +24,6 @@ then install the library:
 Or if you're in a virtualenv:
 
     python setup.py install
-
-I have not been able to make the bindings work in Python 3 yet.
 
 ## Usage
 
@@ -47,7 +48,7 @@ was Python sequence, flat lists will be returned.
 There's also a function _aacgm2geo(…)_ which simply calls
 _geo2aacgm(…)_ with the _reversed_ flag set.
 
-Note that the C source uses (lat,lon) order. I prefer (lon,lat), so
+Note that the C source uses (lat, lon) order. I prefer (lon, lat), so
 that's what the wrapper code uses.
 
 Other functions: _setNow()_, _setDateTime(**datetime**)_,

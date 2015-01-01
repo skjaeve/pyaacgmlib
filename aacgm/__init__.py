@@ -1,6 +1,6 @@
 from __future__ import print_function
 
-import aacgmlib_v2
+from . import aacgmlib_v2 # Relative-path import, now works in Python3
 import os
 
 ## Set ENVIRON variable to point at AACGM coefficients
