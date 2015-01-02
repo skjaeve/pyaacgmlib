@@ -13,9 +13,10 @@ other versions.
 
 ## Installation
 
-Install SWIG if you don't already have it, for example
+Install SWIG if you don't already have it, and the headers for the
+Python version you're compiling for, for example
 
-    sudo aptitude install swig
+    sudo aptitude install swig python-dev python3-dev
 
 then install the library:
 
