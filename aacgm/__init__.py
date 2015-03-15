@@ -45,14 +45,21 @@ def getDateTime():
 
     status = aacgmlib_v2.AACGM_v2_GetDateTime(yearP, monthP, dayP, hourP, minuteP, secondP, daynoP)
     
-    dt = datetime.datetime(INT(yearP), INT(monthP), INT(dayP), INT(hourP), INT(minuteP), INT(secondP))
+    try:
+        dt = datetime.datetime(INT(yearP), INT(monthP), INT(dayP), INT(hourP), INT(minuteP), INT(secondP))
+    except:
+        print('NOTICE: Invalid datetime returned - AACGM datetime not set')
+        dt = (INT(yearP), INT(monthP), INT(dayP), INT(hourP), INT(minuteP), INT(secondP))
 
     return (status, dt, INT(daynoP))
 
-def geo2aacgm(datetime, lons, lats, alts, Re = 6371.0, reversed = False):
+def geo2aacgm(datetime, lons, lats, alts, Re = 6371.2, reversed = False):
     """Call AAGCM library method to compute AACGM coordinates from GEO or
     reversed. Must supply a datetime object to set the AACGM library
-    internal time. Data can be in flat sequence form or Numpy arrays."""
+    internal time. Data can be in flat sequence form or Numpy arrays.
+
+    returns: lon, lat arrays of same shape as input input is numpy arrays,
+    otherwise Python lists."""
 
     # Initialise library datetime
     aacgmlib_v2.AACGM_v2_SetDateTime(datetime.year, datetime.month,
@@ -68,9 +75,9 @@ def geo2aacgm(datetime, lons, lats, alts, Re = 6371.0, reversed = False):
     try:
         import numpy
         # First assume the data is flatten-able Numpy arrays
-        llons = lons.flatten()
-        llats = lats.flatten()
-        lalts = alts.flatten()
+        llons = numpy.asarray(lons).flatten()
+        llats = numpy.asarray(lats).flatten()
+        lalts = numpy.asarray(alts).flatten()
 
         # Output arrays, flattened (to be reshaped after computation)
         result_llons = numpy.zeros(llons.shape)
@@ -109,8 +116,25 @@ def geo2aacgm(datetime, lons, lats, alts, Re = 6371.0, reversed = False):
     except:
         return result_llons, result_llats
 
-def aacgm2geo(datetime, lons, lats, alts, Re = 6371.0):
+def aacgm2geo(datetime, lons, lats, alts, Re = 6371.2):
     """Convenience function to call geo2aacgm() with reversed flag set,
     for slightly more readable code."""
 
     return geo2aacgm(datetime, lons, lats, alts, Re, reversed=True)
+
+
+def map_geo_to_alt(datetime, lons, lats, alts, map_to_alts, Re = 6371.2):
+    """Calls geo2aacgm() and aacgm2geo() to map geographic coordinates to new altitudes along magnetic field."""
+
+    import numpy
+
+    lons = numpy.asarray(lons)
+    lats = numpy.asarray(lats)
+    alts = numpy.asarray(alts)
+    map_to_alts = numpy.asarray(map_to_alts)
+
+    if map_to_alts.size == 1:
+        map_to_alts = numpy.zeros(lons.shape) + map_to_alts
+
+    mlons, mlats = geo2aacgm(datetime, lons, lats, alts)
+    return aacgm2geo(datetime, mlons, mlats, map_to_alts)
