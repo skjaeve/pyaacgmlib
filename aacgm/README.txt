@@ -7,11 +7,11 @@ Instructions:
 
 2. Set the environment variable AACGM_v2_DAT_PREFIX to the directory that
    you are storing the coefficients in AND include the prefix of the
-   coefficient files, i.e., aacgm_coeffs-11-
+   coefficient files, i.e., aacgm_coeffs-12-
 
    e.g.:
 
-   AACGM_v2_DAT_PREFIX=/mnt/thayerfs/shepherd/AACGM/idl/coeffs/aacgm_coeffs-11-
+   AACGM_v2_DAT_PREFIX=/mnt/thayerfs/shepherd/AACGM/idl/coeffs/aacgm_coeffs-12-
 
    Note that if you used the old AACGM software from JHU/APL you should have
    a similar variable already set.
@@ -20,7 +20,7 @@ Instructions:
 
 4. Build the test program by running:
 
-   gcc -o test_aacgm test_aacgm.c aacgmlib_v2.c -lm -static
+   gcc -o test_aacgm test_aacgm.c aacgmlib_v2.c igrflib.c genmag.c -lm -static
 
    Note that on older systems you might need to remove the -static flag
 

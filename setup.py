@@ -9,7 +9,8 @@ from distutils.core import setup, Extension
 
 
 aacgmlib_v2_module = Extension('_aacgmlib_v2',
-                           sources=['aacgm/aacgmlib_v2.c', 'aacgm/aacgmlib_v2.i'],
+                           sources=['aacgm/aacgmlib_v2.c', 'aacgm/aacgmlib_v2.i', 'aacgm/igrflib.c', 'aacgm/genmag.c'],
+                           define_macros=[('DEBUG', '1')], undef_macros=['NDEBUG'],
                            )
 
 setup (packages = ['aacgm'], 

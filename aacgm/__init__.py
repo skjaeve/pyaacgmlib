@@ -3,10 +3,42 @@ from __future__ import print_function
 from . import aacgmlib_v2 # Relative-path import, now works in Python3
 import os
 
+"""
+Copied from C functions:
+;     Input Arguments:  
+;       in_lat        - latitude in degrees
+;       in_lon        - longitude in degrees
+;       height        - height above Earth in km
+;       code          - bitwise code for passing options into converter
+;                       G2A         - geographic (geodetic) to AACGM-v2
+;                       A2G         - AACGM-v2 to geographic (geodetic)
+;                       TRACE       - use field-line tracing, not coefficients
+;                       ALLOWTRACE  - use trace only above 2000 km
+;                       BADIDEA     - use coefficients above 2000 km
+;       order         - integer order of spherical harmonic expansion
+"""
+
 ## Set ENVIRON variable to point at AACGM coefficients
 # This is not a pretty cludge, but this is how the C code wants it
-os.environ['AACGM_v2_DAT_PREFIX'] = os.path.join(__path__[0], 'coeffs', 'aacgm_coeffs-11-')
+os.environ['AACGM_v2_DAT_PREFIX'] = os.path.join(__path__[0], 'coeffs', 'aacgm_coeffs-12-')
 
+
+# Bitwise flags for sending options to C functions:
+G2A        =  0
+A2G        =  1
+TRACE      =  2
+ALLOWTRACE =  4
+BADIDEA    =  8
+GEOCENTRIC = 16
+
+"""
+#define G2A        0    /* convert geographic (geodetic) to AACGM-v2 coords  */
+#define A2G        1    /* convert AACGM-v2 to geographic (geodetic) coords  */
+#define TRACE      2    /* use field-line tracing to compute coordinates     */
+#define ALLOWTRACE 4    /* if height is >2000 km use tracing, else use coefs */
+#define BADIDEA    8    /* use coefficients above 2000 km; Terrible idea!!   */
+#define GEOCENTRIC 16   /* assume inputs are geocentric with sphere RE       */
+"""
 def setNow():
     """Sets the AACGM library internal datetime to current time (UTC). Not
     sure if it handles timezones or assumes the computer clock to be in
@@ -53,7 +85,7 @@ def getDateTime():
 
     return (status, dt, INT(daynoP))
 
-def geo2aacgm(datetime, lons, lats, alts, Re = 6371.2, reversed = False):
+def geo2aacgm(datetime, lons, lats, alts, Re = 6371.2, reversed = False, FLAG=None):
     """Call AAGCM library method to compute AACGM coordinates from GEO or
     reversed. Must supply a datetime object to set the AACGM library
     internal time. Data can be in flat sequence form or Numpy arrays.
@@ -67,10 +99,13 @@ def geo2aacgm(datetime, lons, lats, alts, Re = 6371.2, reversed = False):
                                      datetime.minute, datetime.second)
 
     # Direction of coordinate conversion. 0 = geo -> aacgm, 1 = aacgm -> geo
+    # Definition text copied near top of file
     if reversed:
-        DIRECTION_FLAG = 1
+        DIRECTION_FLAG = A2G
     else:
-        DIRECTION_FLAG = 0
+        DIRECTION_FLAG = G2A
+    if FLAG:
+        DIRECTION_FLAG = FLAG
 
     try:
         import numpy

@@ -33,7 +33,7 @@
 ; AACGM_v2_SetDateTime
 ; AACGM_v2_GetDateTime
 ; AACGM_v2_SetNow
-; msg_notime
+; AACGM_v2_errmsg
 ;
 
 ; AACGM_v2_Dayno
@@ -50,17 +50,12 @@
 #include <math.h>
 #include <time.h>
 #include "aacgmlib_v2.h"
+#include "igrflib.h"
+#include "genmag.h"
 
 #define DEBUG 0
 
-#define RE      6371.2	/* Earth Radius */
-#define MAXALT  2000		/* maximum altitude in km */
-#define NCOORD  3				/* xyz */
-#define POLYORD 5				/* quartic polynomial fit in altitude */
-#define NFLAG   2				/* 0: geo to AACGM, 1: AACGM to geo */
-#define SHORDER 10			/* order of Spherical Harmonic expansion */
-#define KMAX    ((SHORDER+1)*(SHORDER+1))   /* number of SH coefficients */
-
+/* put these in the library header file when you figure out how to do so... */
 struct {
 	int year;
 	int month;
@@ -81,14 +76,15 @@ double fyear_old = -1.;
 double height_old[2] = {-1,-1};
 
 struct {
-  double coef[KMAX][NCOORD][POLYORD][NFLAG];			/* interpolated coefs */
-  double coefs[KMAX][NCOORD][POLYORD][NFLAG][2];	/* bracketing coefs */
+  double coef[AACGM_KMAX][NCOORD][POLYORD][NFLAG];			/* interpolated coefs */
+  double coefs[AACGM_KMAX][NCOORD][POLYORD][NFLAG][2];	/* bracketing coefs */
 } sph_harm_model;
 
 struct complex {
 	double x;
 	double y;
 };
+
 
 /*-----------------------------------------------------------------------------
 ;
@@ -503,13 +499,18 @@ double AACGM_v2_Sgn(double a, double b)
 ;
 ; CALLING SEQUENCE:
 ;       err = convert_geo_coord(in_lat,in_lon,height, out_lat,out_lon,
-;                               flag,order);
+;                               code,order);
 ;     
 ;     Input Arguments:  
 ;       in_lat        - latitude in degrees
 ;       in_lon        - longitude in degrees
 ;       height        - height above Earth in km
-;       flag          - 0 for geo to AACGM; 1 for AACGM to geo
+;       code          - bitwise code for passing options into converter
+;                       G2A         - geographic (geodetic) to AACGM-v2
+;                       A2G         - AACGM-v2 to geographic (geodetic)
+;                       TRACE       - use field-line tracing, not coefficients
+;                       ALLOWTRACE  - use trace only above 2000 km
+;                       BADIDEA     - use coefficients above 2000 km
 ;       order         - integer order of spherical harmonic expansion
 ;
 ;     Output Arguments:
@@ -523,13 +524,13 @@ double AACGM_v2_Sgn(double a, double b)
 */
 
 int convert_geo_coord(double lat_in, double lon_in, double height_in,
-											double *lat_out, double *lon_out, int flag, int order) {
- 
-	int i,j,k,l,m,f,a,t;
+											double *lat_out, double *lon_out, int code, int order) {
+
+	int i,j,k,l,m,f,a,t,flag;
 	int i_err64, err;
 
 //	extern int rylm();
-	double ylmval[KMAX];
+	double ylmval[AACGM_KMAX];
 	double colat_temp;
 	double lon_output;
     
@@ -542,8 +543,9 @@ int convert_geo_coord(double lat_in, double lon_in, double height_in,
 	double ztmp, fac;
 	double alt_var=0;
 	double lon_input=0;
+	double llh[3];
 
-	static double cint[KMAX][NCOORD][NFLAG];
+	static double cint[AACGM_KMAX][NCOORD][NFLAG];
 
 	#if DEBUG > 0
 	printf("convert_geo_coord\n");
@@ -551,56 +553,27 @@ int convert_geo_coord(double lat_in, double lon_in, double height_in,
 
 	/* no date/time set so use current time */
 	if (aacgm_date.year < 0) {		/* AACGM_v2_SetNow();*/
-		msg_notime();
+		AACGM_v2_errmsg(0);
 		return -128;
 	}
 
 	/* TRACE */ /* call tracing functions here and return */
+	if ((code & TRACE) || (height_in > MAXALT && (code & ALLOWTRACE))) {
+		if (A2G & code) {		/* AACGM-v2 to geographic */
+			err = AACGM_v2_Trace_inv(lat_in,lon_in,height_in, lat_out,lon_out);
+			if ((code & GEOCENTRIC) == 0) {
+				geoc2geod(*lat_out,*lon_out,(RE+height_in)/RE, llh);
+				*lat_out = llh[0];
+			}
+		} else {
+			err = AACGM_v2_Trace(lat_in,lon_in,height_in, lat_out,lon_out);
+		}
 
-	/* myear is the epoch model year */
-	myear = aacgm_date.year/5*5;
-	if (myear != myear_old) {		/* load the new coefficients, if needed */
-		err = AACGM_v2_LoadCoefs(myear);
-		if (err != 0) return err;
-		fyear_old = -1;						/* force time interpolation */
-		height_old[0] = -1.;			/* force height interpolation */
-		height_old[1] = -1.;
+		return (err);
 	}
-
-	/* fyear is the floating point time */
-	fyear = aacgm_date.year + ((aacgm_date.dayno-1) + (aacgm_date.hour +
-										(aacgm_date.minute + aacgm_date.second/60.)/60.)/24.)/
-										aacgm_date.daysinyear;
-	/* time interpolation right here */
-	if (fyear != fyear_old) {
-		#if DEBUG > 0
-		printf("** TIME INTERPOLATION **\n");
-		#endif
-
-		for (f=0;f<NFLAG;f++)
-		for (l=0;l<POLYORD;l++)
-		for (a=0;a<NCOORD;a++)
-		for (t=0;t<KMAX;t++)
-			sph_harm_model.coef[t][a][l][f] = sph_harm_model.coefs[t][a][l][f][0] +
-					(fyear - myear) * (sph_harm_model.coefs[t][a][l][f][1] -
-														sph_harm_model.coefs[t][a][l][f][0])/5;
-
-		height_old[0] = -1.;			/* force height interpolation because coeffs */
-		height_old[1] = -1.;			/* have changed */
-
-		fyear_old = fyear;
-	}
-
-// have loaded new coefficients so neither heights are the same and must
-// redo height interpolation
-/*	if (first_coeff_old != sph_harm_model.coef[0][0][0][0]) {
-		height_old[0] = -1.0;
-		height_old[1] = -1.0;
-	}
-	first_coeff_old = sph_harm_model.coef[0][0][0][0];
-*/
 
 	/* determine the altitude dependence of the coefficients */
+	flag = (A2G & code);		/* 0 for G2A; 1 for A2G */
 	if (height_in != height_old[flag]) {
 		alt_var = height_in/(double)MAXALT;
 		alt_var_sq = alt_var * alt_var;
@@ -617,7 +590,7 @@ int convert_geo_coord(double lat_in, double lon_in, double height_in,
 		#endif
 
 		for (i=0; i<NCOORD; i++) {
-			for (j=0; j<KMAX;j++) {
+			for (j=0; j<AACGM_KMAX;j++) {
 				/* change to allow general polynomial approximation */
 				cint[j][i][flag] =  sph_harm_model.coef[j][i][0][flag] +
 														sph_harm_model.coef[j][i][1][flag]*alt_var+
@@ -635,9 +608,10 @@ int convert_geo_coord(double lat_in, double lon_in, double height_in,
 	}
 	#if DEBUG > 1
 	printf("cint[0][0][%d] = %lf\n", flag, cint[0][0][flag]);
-	printf("cint[%d][0][%d] = %lf\n", KMAX-1, flag, cint[KMAX-1][0][flag]);
-	printf("cint[%d][%d][%d] = %lf\n", KMAX-1, NCOORD-1, flag,
-																			cint[KMAX-1][NCOORD-1][flag]);
+	printf("cint[%d][0][%d] = %lf\n",
+						AACGM_KMAX-1, flag, cint[AACGM_KMAX-1][0][flag]);
+	printf("cint[%d][%d][%d] = %lf\n", AACGM_KMAX-1, NCOORD-1, flag,
+																			cint[AACGM_KMAX-1][NCOORD-1][flag]);
 	#endif
 
 	x = y = z = 0;
@@ -771,7 +745,7 @@ int AACGM_v2_LoadCoefFP(FILE *fp, int code)
 	for (f=0;f<NFLAG;f++) { 
 		for (l=0;l<POLYORD;l++) {
 			for (a=0;a<NCOORD;a++) { 
-				for (t=0;t<KMAX;t++) {
+				for (t=0;t<AACGM_KMAX;t++) {
 					if (fscanf(fp, "%lf", &tmp) != 1) {
 						#if DEBUG > 0
 						printf("FILE error, aborting\n");
@@ -790,7 +764,7 @@ int AACGM_v2_LoadCoefFP(FILE *fp, int code)
 	for (f=0;f<NFLAG;f++) { 
 		for (l=0;l<POLYORD;l++) {
 			for (a=0;a<NCOORD;a++) { 
-				for (t=0;t<KMAX;t++) {
+				for (t=0;t<AACGM_KMAX;t++) {
 					printf("%lf ", sph_harm_model.coefs[t][a][l][f][code]);
 				}
 				printf("\n");
@@ -900,7 +874,7 @@ int AACGM_v2_LoadCoefs(int year)
 	#if DEBUG > 0
 	printf("AACGM_v2_LoadCoefs: %s\n", fname);
 	#endif
-	ret = AACGM_v2_LoadCoef(fname,0);
+	ret = AACGM_v2_LoadCoef(fname,G2A);		/* forward coefficients */
 	if (ret != 0) return ret;
 
 	sprintf(yrstr,"%4.4d",year+5);  
@@ -910,38 +884,12 @@ int AACGM_v2_LoadCoefs(int year)
 	#if DEBUG > 0
 	printf("AACGM_v2_LoadCoefs: %s\n", fname);
 	#endif
-	ret += AACGM_v2_LoadCoef(fname,1);
+	ret += AACGM_v2_LoadCoef(fname,A2G);	/* inverse coefficients */
 
 	myear_old = year;
 
 	return ret;
 }
-
-/*
-int AACGMInit(int year) {
-  char fname[256];
-  char yrstr[32];  
-  if (year==0) year=DEFAULT_YEAR;
-  sprintf(yrstr,"%4.4d",year);  
-  strcpy(fname,getenv("AACGM_DAT_PREFIX"));  
-  if (strlen(fname)==0) return -1;
-  strcat(fname,yrstr);
-  strcat(fname,".asc");
-  return AACGMLoadCoef(fname);
-}
-*/
-
-
-//int leo_cnvcoord_new(double in_lat, double in_lon, double height,
-//											double *out_lat, double *out_lon, double *r, int flag)
-//{
-//	/* the challenge is how to implement keywords in C: date, trace, etc. */
-//
-//	/* date information must be passed in to this function somehow ... */
-//
-//	/* TRACE: no need to load coefficients if tracing */
-//
-//}
 
 /*-----------------------------------------------------------------------------
 ;
@@ -954,13 +902,19 @@ int AACGMInit(int year) {
 ;
 ; CALLING SEQUENCE:
 ;       err = AACGM_v2_Convert(in_lat, in_lon, height,
-;                 out_lat, out_lon, r, flag);
+;                 out_lat, out_lon, r, code);
 ;     
 ;     Input Arguments:  
 ;       int_lat       - double precision input latitude in degrees
 ;       int_lon       - double precision input longitude in degrees
 ;       height        - altitude in km
-;       flag          - 0 for geo to AACGM; 1 for AACGM to geo
+;       code          - bitwise code for passing options into converter
+;                       G2A         - geographic (geodetic) to AACGM-v2
+;                       A2G         - AACGM-v2 to geographic (geodetic)
+;                       TRACE       - use field-line tracing, not coefficients
+;                       ALLOWTRACE  - use trace only above 2000 km
+;                       BADIDEA     - use coefficients above 2000 km
+;                       GEOCENTRIC  - assume inputs are geocentric w/ RE=6371.2
 ;
 ;     Output Arguments:  
 ;       out_lat       - double precision output latitude in degrees
@@ -974,10 +928,11 @@ int AACGMInit(int year) {
 */
 
 int AACGM_v2_Convert(double in_lat, double in_lon, double height,
-									double *out_lat, double *out_lon, double *r, int flag)
+									double *out_lat, double *out_lon, double *r, int code)
 {
 	int err;
-	int order=10;		/* allow to be passed in? */
+	int order=10;		/* pass in so a lower order would be allowed? */
+	double rtp[3];
 
 	#if DEBUG > 0
 	printf("AACGM_v2_Convert\n");
@@ -985,21 +940,21 @@ int AACGM_v2_Convert(double in_lat, double in_lon, double height,
 
 	/* height < 0 km */
 	if (height < 0) {
-		fprintf(stderr, "ERROR: coordinate transformations are not defined "
+		fprintf(stderr, "WARNING: coordinate transformations are not intended "
 										"for altitudes < 0 km: %lf\n", height);
-		return -2;
+	/*	return -2; */
 	}
 
-	/* TRACE */
-	/* need a 'flag' to indicate that we are doing tracing....*/
 	/* height > 2000 km not allowed for coefficients */
-	if (height > MAXALT) {
+	if (height > MAXALT && !(code & (TRACE|ALLOWTRACE|BADIDEA))) {
 		fprintf(stderr, "ERROR: coefficients are not valid for altitudes "
-										"above %d km: %lf\n", MAXALT, height);
+										"above %d km: %lf.\n", MAXALT, height);
+		fprintf(stderr, "       You must either use field-line tracing "
+                    "(TRACE or ALLOWTRACE) or\n"
+										"       indicate that you know this is a very bad idea "
+										"(BADIDEA)\n\n");
 		return -4;
 	}
-
-//else if ((flag < 0) || (flag > 1)) return -4; 
 
 	/* latitude out of bounds */
 	if (fabs(in_lat) > 90.) {
@@ -1008,15 +963,33 @@ int AACGM_v2_Convert(double in_lat, double in_lon, double height,
 		return -8;
 	}
 
-	if (in_lon < 0) in_lon += 360.0;  
+//	if (in_lon < 0) in_lon += 360.0;  
+//	if (in_lon > 180.0) in_lon -= 360.0;  
 	/* longitude out of bounds */
-	if ((in_lon < 0) || (in_lon > 360)) {
-		fprintf(stderr, "ERROR: longitude must be in the range 0 to 360 degrees: "
-										"%lf\n", in_lon);
+	if ((in_lon < -180) || (in_lon > 180)) {
+		fprintf(stderr, "ERROR: longitude must be in the range -180 to 180 "
+										"degrees: %lf\n", in_lon);
 		return -16;
 	}
 
-	err = convert_geo_coord(in_lat,in_lon,height, out_lat,out_lon, flag,order);
+//printf("%d %d %d %d\n",
+//			code, GEOCENTRIC, code & GEOCENTRIC, (code & GEOCENTRIC)==0);
+	if ((code & GEOCENTRIC) == 0 && (code & A2G) == 0) {
+//printf("GEODETIC\n");
+		/* coordinates are given in geodetic coordinates and must be converted */
+		geod2geoc(in_lat, in_lon, height, rtp);
+//printf("lat: %f %f\n", in_lat, 90.d - rtp[1]/DTOR);
+//printf("lon: %f %f\n", in_lon, rtp[2]/DTOR);
+//printf("alt: %f %f\n", height, (rtp[0]-1.d)*RE);
+//printf("\n");
+
+		/* modify lat/lon/alt to geocentric values */
+		in_lat = 90.d - rtp[1]/DTOR;
+		in_lon = rtp[2]/DTOR;
+		height = (rtp[0]-1.d)*RE;
+	}
+
+	err = convert_geo_coord(in_lat,in_lon,height, out_lat,out_lon, code,order);
 	*r = 1.0;
 
 	if (err !=0) return -1;
@@ -1036,7 +1009,7 @@ int AACGM_v2_Convert(double in_lat, double in_lon, double height,
 ;       err = AACGM_v2_SetDateTime(year, month, day, hour, minute, second);
 ;     
 ;     Input Arguments:  
-;       year          - year [1965-2014]
+;       year          - year [1900-2020)
 ;       month         - month of year [01-12]
 ;       day           - day of month [01-31]
 ;       hour          - hour of day [00-24]
@@ -1052,13 +1025,25 @@ int AACGM_v2_Convert(double in_lat, double in_lon, double height,
 int AACGM_v2_SetDateTime(int year, int month, int day,
 											int hour, int minute, int second)
 {
+	int err, doy, ndays;
+	double fyear;
+
+	doy = dayno(year,month,day,&ndays);
+	fyear = year + ((doy-1) + (hour + (minute + second/60.)/60.)/24.) / ndays;
+
+	if ((fyear < IGRF_FIRST_EPOCH) || (fyear >= IGRF_LAST_EPOCH + 5.)) {
+		AACGM_v2_errmsg(1);
+		return (-1);
+	}
+
 	aacgm_date.year   = year;
 	aacgm_date.month  = month;
 	aacgm_date.day    = day;
 	aacgm_date.hour   = hour;
 	aacgm_date.minute = minute;
 	aacgm_date.second = second;
-	aacgm_date.dayno  = dayno(year,month,day,&(aacgm_date.daysinyear));
+	aacgm_date.dayno  = doy;
+	aacgm_date.daysinyear = ndays;
 
 	#if DEBUG > 0
 	printf("AACGM_v2_SetDateTime\n");
@@ -1067,7 +1052,9 @@ int AACGM_v2_SetDateTime(int year, int month, int day,
 				aacgm_date.hour, aacgm_date.minute, aacgm_date.second);
 	#endif
 
-	return 0;
+	err = AACGM_v2_TimeInterp();
+
+	return err;
 }
 
 /*-----------------------------------------------------------------------------
@@ -1130,12 +1117,23 @@ int AACGM_v2_GetDateTime(int *year, int *month, int *day,
 int AACGM_v2_SetNow(void)
 {
 	/* current time */
-	int dyno;
+	int err, doy,ndays;
+	double fyear;
 	time_t now;
 	struct tm *tm_now;
 
 	now = time(NULL);
 	tm_now = gmtime(&now);		/* right now in UT */
+
+	doy = dayno(tm_now->tm_year,tm_now->tm_mon,tm_now->tm_mday,&ndays);
+	fyear = tm_now->tm_year + ((doy-1) + (tm_now->tm_hour + (tm_now->tm_min +
+																			tm_now->tm_sec/60.)/60.)/24.) / ndays;
+
+	if ((fyear < IGRF_FIRST_EPOCH) || (fyear >= IGRF_LAST_EPOCH + 5.)) {
+		fprintf(stderr, "\nDate range for AACGM-v2 is [%4d - %4d)\n\n",
+											IGRF_FIRST_EPOCH, IGRF_LAST_EPOCH + 5);
+		return (-1);
+	}
 
 	aacgm_date.year   = (*tm_now).tm_year + 1900;
 	aacgm_date.month  = (*tm_now).tm_mon  + 1;
@@ -1144,7 +1142,7 @@ int AACGM_v2_SetNow(void)
 	aacgm_date.minute = (*tm_now).tm_min;
 	aacgm_date.second = (*tm_now).tm_sec;
 	aacgm_date.dayno  = (*tm_now).tm_yday + 1;
-	dyno = dayno(aacgm_date.year,0,0,&(aacgm_date.daysinyear));
+	aacgm_date.daysinyear = ndays;
 
 	#if DEBUG > 0
 	printf("AACGM_v2_SetNow\n");
@@ -1153,93 +1151,313 @@ int AACGM_v2_SetNow(void)
 				aacgm_date.hour, aacgm_date.minute, aacgm_date.second);
 	#endif
 
-	fprintf(stderr, "\nAACGM-v2: No date/time specified, using current time: ");
-	fprintf(stderr, "%04d%02d%02d %02d%02d:%02d\n\n",
-				aacgm_date.year, aacgm_date.month, aacgm_date.day,
-				aacgm_date.hour, aacgm_date.minute, aacgm_date.second);
+	err = AACGM_v2_TimeInterp();
 
-	return 0;
+	return err;
 }
 
 /*-----------------------------------------------------------------------------
 ;
 ; NAME:
-;       dayno
-;
-; PURPOSE:
-;       Function to compute the day of the year and the number of days in the
-;       year.
-;
-; CALLING SEQUENCE:
-;       doy = dayno(year, month, day, diy);
-;     
-;     Input Arguments:
-;       year          - year [1965-2014]
-;       month         - month of year [01-12]
-;       day           - day of month [01-31]
-;
-;     Output Arguments (integer pointers):  
-;       diy           - number of days in the given year
-;
-;     Return Value:
-;       error code
-;
-;+-----------------------------------------------------------------------------
-*/
-
-int dayno(int year, int month, int day, int *diy)
-{
-	int k,tot;
-	int ndays[] = {31,28,31,30,31,30,31,31,30,31,30,31};
-
-	*diy = 365;
-	if(((year%4==0)&&(year%100!=0))||(year%400==0)) {
-		ndays[1]++;
-		*diy = 366;
-	}
-
-	tot = 0;
-	for (k=0; k<month-1; k++) tot += ndays[k];
-	tot += day;
-
-	return tot;
-}
-
-/*-----------------------------------------------------------------------------
-;
-; NAME:
-;       msg_notime
+;       AACGM_v2_errmsg
 ;
 ; PURPOSE:
 ;       Display error message because no date and time have been set.
 ;
 ; CALLING SEQUENCE:
-;       msg_notime();
+;       AACGM_v2_errmsg(code);
 ;     
 ;+-----------------------------------------------------------------------------
 */
 
-void msg_notime(void)
+void AACGM_v2_errmsg(int ecode)
 {
-fprintf(stderr,
-"\n"
-"***************************************************************************\n"
-"* AACGM-v2 ERROR: No Date/Time Set                                        *\n"
-"*                                                                         *\n"
-"* You must specifiy the date and time in order to use AACGM coordinates,  *\n"
-"* which depend on the internal (IGRF) magnetic field. Before calling      *\n"
-"* AACGM_v2_Convert() you must set the date and time to the integer values *\n"
-"* using the function:                                                     *\n"
-"*                                                                         *\n"
-"*   AACGM_v2_SetDateTime(year,month,day,hour,minute,second);              *\n"
-"*                                                                         *\n"
-"* or to the current computer time in UT using the function:               *\n"
-"*                                                                         *\n"
-"*   AACGM_v2_SetNow();                                                    *\n"
-"*                                                                         *\n"
-"* subsequent calls to AACGM_v2_Convert() will use the last date and time  *\n"
-"* that was set, so update to the actual date and time that is desired.    *\n"
-"***************************************************************************"
-"\n\n");
+	char estr[100];
+
+	fprintf(stderr, "\n"
+	"**************************************************************************"
+	"\n");
+
+	switch (ecode) {
+		case 0:	/* no Date/Time set */
+	fprintf(stderr,
+	"* AACGM-v2 ERROR: No Date/Time Set                                       *\n"
+	"*                                                                        *\n"
+	"* You must specifiy the date and time in order to use AACGM coordinates, *\n"
+	"* which depend on the internal (IGRF) magnetic field. Before calling     *\n"
+	"* AACGM_v2_Convert() you must set the date and time to the integer values*\n"
+	"* using the function:                                                    *\n"
+	"*                                                                        *\n"
+	"*   AACGM_v2_SetDateTime(year,month,day,hour,minute,second);             *\n"
+	"*                                                                        *\n"
+	"* or to the current computer time in UT using the function:              *\n"
+	"*                                                                        *\n"
+	"*   AACGM_v2_SetNow();                                                   *\n"
+	"*                                                                        *\n"
+	"* subsequent calls to AACGM_v2_Convert() will use the last date and time *\n"
+	"* that was set, so update to the actual date and time that is desired.   *"
+	"\n");
+		break;
+
+		case 1: /* Date/Time out of bounds */
+	fprintf(stderr,
+	"* AACGM-v2 ERROR: Date out of bounds                                     *\n"
+	"*                                                                        *\n"
+	"* The current date range for AACGM-v2 coordinates is [1990-2020), which  *\n"
+	"* corresponds to the date range for the IGRF12 model, including the      *\n"
+	"* 5-year secular variation.                                              *"
+	"\n");
+		break;
+	}
+	fprintf(stderr,
+	"**************************************************************************"
+	"\n\n");
+}
+
+/*-----------------------------------------------------------------------------
+;
+; NAME:
+;       AACGM_v2_TimeInterp
+;
+; PURPOSE:
+;       Interpolate coefficients between adjacent 5-year epochs
+;
+; CALLING SEQUENCE:
+;       err = AACGM_v2_TimeInterp();
+;     
+;+-----------------------------------------------------------------------------
+*/
+
+int AACGM_v2_TimeInterp(void)
+{
+	int myear,f,l,a,t,err;
+	double fyear;
+
+	/* myear is the epoch model year */
+	myear = aacgm_date.year/5*5;
+	if (myear != myear_old) {		/* load the new coefficients, if needed */
+		err = AACGM_v2_LoadCoefs(myear);
+		if (err != 0) return err;
+		fyear_old = -1;						/* force time interpolation */
+		height_old[0] = -1.;			/* force height interpolation */
+		height_old[1] = -1.;
+	}
+
+	/* fyear is the floating point time */
+	fyear = aacgm_date.year + ((aacgm_date.dayno-1) + (aacgm_date.hour +
+										(aacgm_date.minute + aacgm_date.second/60.)/60.)/24.)/
+										aacgm_date.daysinyear;
+
+	/* time interpolation right here */
+	if (fyear != fyear_old) {
+		#if DEBUG > 0
+		printf("** TIME INTERPOLATION **\n");
+		#endif
+
+		for (f=0;f<NFLAG;f++)
+		for (l=0;l<POLYORD;l++)
+		for (a=0;a<NCOORD;a++)
+		for (t=0;t<AACGM_KMAX;t++)
+			sph_harm_model.coef[t][a][l][f] = sph_harm_model.coefs[t][a][l][f][0] +
+					(fyear - myear) * (sph_harm_model.coefs[t][a][l][f][1] -
+														sph_harm_model.coefs[t][a][l][f][0])/5;
+
+		height_old[0] = -1.;			/* force height interpolation because coeffs */
+		height_old[1] = -1.;			/* have changed */
+
+		fyear_old = fyear;
+	}
+
+	return (0);
+}
+
+
+int AACGM_v2_Trace(double lat_in, double lon_in, double alt,
+										double *lat_out, double *lon_out)
+{
+	int err, kk, idir;
+	unsigned long k,niter;
+	double ds, dsRE, dsRE0, eps, Lshell;
+	double rtp[3],xyzg[3],xyzm[3],xyzc[3],xyzp[3];
+
+	// Q: will this load coefficients each time???
+	/* set date for IGRF model */
+	IGRF_SetDateTime(aacgm_date.year, aacgm_date.month, aacgm_date.day,
+										aacgm_date.hour, aacgm_date.minute, aacgm_date.second);
+
+	// Q: these could eventually be command-line options
+	ds    = 1.d;
+	dsRE  = ds/RE;
+	dsRE0 = dsRE;
+	eps   = 1.e-4/RE;
+
+	/* for the model we are doing the tracing in geocentric coordinates */
+	rtp[0] = (RE+alt)/RE;				/* distance in RE; 1.0 is surface of sphere */
+	rtp[1] = (90.-lat_in)*DTOR;		/* colatitude in radians */
+	rtp[2] = lon_in*DTOR;					/* longitude in radians */
+
+	k = 0L;
+	/* convert position to Cartesian coords */
+	sph2car(rtp, xyzg);
+
+	/* convert to magnetic Dipole coordinates */
+	geo2mag(xyzg, xyzm);
+
+	idir = (xyzm[2] > 0.) ? -1 : 1;   /* N or S hemisphere */
+
+	dsRE = dsRE0;
+
+	/*
+	; trace to magnetic equator
+	;
+	; Note that there is the possibility that the magnetic equator lies
+	; at an altitude above the surface of the Earth but below the starting
+	; altitude. I am not certain of the definition of CGM, but these
+	; fieldlines map to very different locations than the solutions that
+	; lie above the starting altitude. I am considering the solution for
+	; this set of fieldlines as undefined; just like those that lie below
+	; the surface of the Earth.
+	*/
+	while (idir*xyzm[2] < 0.) {
+
+		for (kk=0;kk<3;kk++) xyzp[kk] = xyzg[kk]; /* save as previous */
+
+		AACGM_v2_RK45(xyzg, idir, &dsRE, eps, 1); // set to 0 for RK4: /noadapt)
+
+		/* convert to magnetic Dipole coordinates */
+		geo2mag(xyzg, xyzm);
+
+		k++;
+	}
+	niter = k;
+
+	if (niter > 1) {
+		/* now bisect stepsize (fixed) to land on magnetic equator w/in 1 m */
+		for (k=0;k<3;k++) xyzc[k] = xyzp[k];
+		kk = 0L;
+		while (dsRE > 1e-3/RE) {
+			dsRE *= .5;
+			for (k=0;k<3;k++) xyzp[k] = xyzc[k];
+			AACGM_v2_RK45(xyzc, idir, &dsRE, eps, 0);  /* using RK4 */
+			geo2mag(xyzc,xyzm);
+
+			/* Is it possible that resetting here causes a doubling of the tol? */
+			if (idir * xyzm[2] > 0)
+			for (k=0;k<3;k++) xyzc[k] = xyzp[k];
+
+			kk++;
+		}
+		niter += kk;
+	}
+
+	/* 'trace' back to reference surface along Dipole field lines */
+	Lshell = sqrt(xyzc[0]*xyzc[0] + xyzc[1]*xyzc[1] + xyzc[2]*xyzc[2]);
+	if (Lshell < (RE+alt)/RE) { /* magnetic equator is below ... */
+		*lat_out = NAN;
+		*lon_out = NAN;
+
+		err = -1;
+	} else {
+		geo2mag(xyzc, xyzm);  /* geographic to magnetic */
+		car2sph(xyzm, rtp);
+
+		*lat_out = -idir*acos(sqrt(1.d/Lshell))/DTOR;
+		*lon_out = rtp[2]/DTOR;
+		if (*lon_out > 180) *lon_out -= 360.;
+
+		err = 0;
+	}
+
+	return (err);
+}
+
+int AACGM_v2_Trace_inv(double lat_in, double lon_in, double alt,
+										double *lat_out, double *lon_out)
+{
+	int err, kk, idir;
+	unsigned long k,niter;
+	double ds, dsRE, dsRE0, eps, Lshell;
+	double rtp[3],xyzg[3],xyzm[3],xyzc[3],xyzp[3];
+
+	// Q: will this load coefficients each time???
+	/* set date for IGRF model */
+	IGRF_SetDateTime(aacgm_date.year, aacgm_date.month, aacgm_date.day,
+										aacgm_date.hour, aacgm_date.minute, aacgm_date.second);
+
+	// Q: these could eventually be command-line options
+	ds    = 1.d;
+	dsRE  = ds/RE;
+	dsRE0 = dsRE;
+	eps   = 1.e-4/RE;
+
+	// Q: Test this
+	/* poles map to infinity */
+	if (fabs(fabs(lat_in) - 90.) < 1e-6)
+		lat_in += (lat_in > 0) ? -1e-6 : 1e-6;
+
+	Lshell = 1.d/(cos(lat_in*DTOR)*cos(lat_in*DTOR));
+	if (Lshell <(RE+alt)/RE) { /* solution does not exist; the starting
+															* position at the magnetic equator is below
+															* the altitude of interest */
+		*lat_out = NAN;
+		*lon_out = NAN;
+		err = -1;
+	} else {
+		/* magnetic Cartesian coordinates of fieldline trace starting point */
+		xyzm[0] = Lshell*cos(lon_in*DTOR);
+		xyzm[1] = Lshell*sin(lon_in*DTOR);
+		xyzm[2] = 0.d;
+
+		/* geographic Cartesian coordinates of starting point */
+		mag2geo(xyzm, xyzg);
+
+		/* geographic spherical coordinates of starting point */
+		car2sph(xyzg,rtp);
+
+		k = 0L;
+
+		/* direction of trace is determined by the starting hemisphere? */
+		idir = (lat_in > 0) ? 1 : -1;
+
+		dsRE = dsRE0;
+
+		/* trace back to altitude above Earth */
+		while (rtp[0] >  (RE + alt)/RE) {
+			for (kk=0;kk<3;kk++) xyzp[kk] = xyzg[kk]; /* save as previous */
+
+			AACGM_v2_RK45(xyzg, idir, &dsRE, eps, 1);  // set to 0 for RK4: /noadapt)
+
+			car2sph(xyzg, rtp);
+
+			k++;
+		}
+		niter = k;
+
+		if (niter > 1) {
+			/* now bisect stepsize (fixed) to land on magnetic equator w/in 1 m */
+			for (k=0;k<3;k++) xyzc[k] = xyzp[k];
+			kk = 0L;
+			while (dsRE > 1e-3/RE) {
+				dsRE *= .5;
+				for (k=0;k<3;k++) xyzp[k] = xyzc[k];
+				AACGM_v2_RK45(xyzc, idir, &dsRE, eps, 0);  /* using RK4 */
+
+				car2sph(xyzc, rtp);
+
+				if (rtp[0] < (RE + alt)/RE)
+					for (k=0;k<3;k++) xyzc[k] = xyzp[k];
+
+				kk++;
+			}
+			niter += kk;
+		}
+
+		*lat_out = 90.d - rtp[1]/DTOR;
+		*lon_out = rtp[2]/DTOR;
+		if (*lon_out > 180) *lon_out -= 360.;
+		err = 0;
+	}
+
+	return (0);
 }
 
