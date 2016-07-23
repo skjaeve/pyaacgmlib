@@ -136,7 +136,7 @@ def geo2aacgm(datetime, lons, lats, alts, Re = 6371.2, reversed = False, FLAG=No
     # The variable r is included as a return value but will always be 1.0.
     
     for i in range(len(llons)):
-        status = aacgmlib_v2.AACGM_v2_Convert(llats[i], llons[i], lalts[i], lat_out, lon_out, r, DIRECTION_FLAG)
+        status = aacgmlib_v2.AACGM_v2_Convert(float(llats[i]), float(llons[i]), float(lalts[i]), lat_out, lon_out, r, DIRECTION_FLAG)
         
         if status == 0:
             result_llons[i] = aacgmlib_v2.doublep_value(lon_out)

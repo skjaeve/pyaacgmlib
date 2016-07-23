@@ -26,6 +26,9 @@ Or if you're in a virtualenv:
 
     python setup.py install
 
+Installation via `pip install . --user` doesn't work, because it doesn't
+actually compile anything.
+
 ## Usage
 
 There are wrapper functions in \_\_init\_\_.py to avoid the hassle of C
