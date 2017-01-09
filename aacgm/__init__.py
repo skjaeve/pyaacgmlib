@@ -187,5 +187,5 @@ def mlon2mlt(datetime, mlons):
 
     out_mlt = n.zeros(len(mlons))
     for idx, mlon in enumerate(mlons):
-        out_mlt[idx] = aacgmlib_v2.MLTConvert_v2(datetime.year, datetime.month, datetime.day, datetime.hour, datetime.minute, datetime.second, mlon)
+        out_mlt[idx] = aacgmlib_v2.MLTConvert_v2(datetime.year, datetime.month, datetime.day, datetime.hour, datetime.minute, datetime.second, n.float64(mlon))
     return out_mlt

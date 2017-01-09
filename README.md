@@ -48,11 +48,17 @@ Return value: Arrays of converted (lon, lat). If input was numpy
 arrays, returned arrays are numpy arrays of the same shape. If input
 was Python sequence, flat lists will be returned.
 
-There's also a function _aacgm2geo(…)_ which simply calls
-_geo2aacgm(…)_ with the _reversed_ flag set.
+There's also a convenience function `aacgm2geo(…)` which simply calls
+`geo2aacgm(…)` with the _reversed_ flag set.
 
-Note that the C source uses (lat, lon) order. I prefer (lon, lat), so
-that's what the wrapper code uses.
+`mlon2mlt(datetime, mlons)` computes MLT from MLON and datetime. MLON can be a
+single float or a sequence of floats. Only one datetime may be specified. Uses
+the MLT algorithm in the C code, and may disagree with other MLT calculators'
+results. Apparently MLT isn't as well-defined and agreed upon as we like to
+pretend.
+
+Note that the C source uses (lat, lon) order of function parameters. I prefer
+(lon, lat), so that's what the wrapper code uses.
 
 Other functions: _setNow()_, _setDateTime(**datetime**)_,
 _getDateTime()_ exist but aren't really needed, unless you're going to
@@ -60,11 +66,15 @@ bypass the wrapper functions and use the C functions directly.
 
 
 
+
 # License
 
 Short story: GPL v3.
 
-Long story:
-Version 2.3 of the AACGMv2 C code includes the AstAlg library, which is licensed under GPL v2 or later. The magnetic local time (MLT) code uses the AstAlg code. Since I wrap the MLT functions, my code is automatically GPL.
-Older versions of the AACGMv2 code (without MLT) didn't have an explicit license, so I simply assume that it had an implicit GPL-compatible license.
-The time.c/h files refer to a different license file which I haven't been able to find.
+Long story: Version 2.3 of the AACGMv2 C code includes the AstAlg library,
+which is licensed under GPL v2 or later. The magnetic local time (MLT) code
+uses the AstAlg code. Since I wrap the MLT functions, my code is automatically
+GPL. Older versions of the AACGMv2 code (without MLT) didn't have an explicit
+license, so I simply assume that it had an implicit GPL-compatible license.
+The time.c/h files refer to a different license file which I haven't been able
+to find.
