@@ -18,7 +18,7 @@ struct {
 	int second;
 	int dayno;
 	int daysinyear;
-} igrf_date = {-1,-1,-1,-1,-1,-1,-1};
+} igrf_date = {-1,-1,-1,-1,-1,-1,-1,-1};
 
 struct {
 	double ctcl;
@@ -40,7 +40,7 @@ int    nmx;													/* order of expansion */
 ; for debugging
 ;+-----------------------------------------------------------------------------
 */
-void pause(void)
+void igrf_pause(void)
 {
 	char ch;
 
@@ -69,7 +69,7 @@ void pause(void)
 ;   k    0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20 ...
 ;
 ; CALLING SEQUENCE:
-;       err = IGRF_loadcoeffs(filename);
+;       err = IGRF_loadcoeffs();
 ;     
 ;     Input Arguments:  
 ;       filename      - name of file which contains IGRF coefficients; default
@@ -81,13 +81,14 @@ void pause(void)
 ;+-----------------------------------------------------------------------------
 */
 
-int IGRF_loadcoeffs(char *filename)
+int IGRF_loadcoeffs(void)
 {
-	int i,j,k,l,m,n, ll,mm;
+	int k,l,m,n, ll,mm;
 	int fac, len;
 	int iyear, nyear;
 	int dgrf[MAXNYR], epoch[MAXNYR];
 	char jnk;
+	char *filename;
 	char header[2][MAXSTR], line[MAXSTR];
 	double fyear;
 	double coef, sv;
@@ -98,7 +99,17 @@ int IGRF_loadcoeffs(char *filename)
 	printf("IGRF_loadceoffs\n");
 	#endif
 
-	#if DEBUG > 0
+	/* file containing the IGRF coefficients */
+	if ((filename = getenv("IGRF_COEFFS")) == NULL) {
+		printf("\n");
+		printf("***************************************************************\n");
+		printf("* You MUST set the environment variable IGRF_COEFFS \n");
+		printf("***************************************************************\n");
+		return (-99);
+	}
+//	strcpy(filename,getenv("IGRF_COEFFS"));
+
+	#if DEBUG > 1
 	printf("Schmidt quasi-normalization factors\n");
 	printf("===================================\n\n");
 	#endif
@@ -127,7 +138,7 @@ int IGRF_loadcoeffs(char *filename)
 			/* Winch 2004 */
     	Slm[k] = Slm[n] = sqrt(fac*fctrl[l-m]/fctrl[l+m]);
 
-			#if DEBUG > 0
+			#if DEBUG > 1
     	printf("$ %2d %2d %2d %e %e %e\n", l, m, k, fctrl[l-m],fctrl[l+m],Slm[k]);
     	printf("$ %2d %2d %2d %e %e %e\n", l,-m, n, fctrl[l-m],fctrl[l+m],Slm[n]);
 			#endif
@@ -161,7 +172,7 @@ int IGRF_loadcoeffs(char *filename)
 		m++;
 	}
 	len = m;
-	#if DEBUG > 0
+	#if DEBUG > 1
 	fprintf(stderr, "%s\n", line);
 	#endif
 
@@ -174,7 +185,7 @@ int IGRF_loadcoeffs(char *filename)
 		fprintf(stderr, "Too many years in file: %d\n", nyear);
 		return (-2);
 	}
-	#if DEBUG > 0
+	#if DEBUG > 1
 	fprintf(stderr, "%d years\n", nyear);
 	#endif
 
@@ -186,7 +197,7 @@ int IGRF_loadcoeffs(char *filename)
 			case 'G': iyear++; break;
 		}
 	}
-	#if DEBUG > 0
+	#if DEBUG > 1
 	for (m=0; m<nyear; m++) fprintf(stderr, "%d\n", dgrf[m]);
 	#endif
 
@@ -201,12 +212,12 @@ int IGRF_loadcoeffs(char *filename)
 	for (m=0; m<nyear; m++) {
 		fscanf(fp, "%lf", &fyear);
 		epoch[m] = (int)floor(fyear);
-		#if DEBUG > 0
+		#if DEBUG > 1
 		fprintf(stderr, "%8.2lf\n", fyear);
 		#endif
 	}
 
-	#if DEBUG > 0
+	#if DEBUG > 1
 	for (m=0; m<nyear; m++) fprintf(stderr, "%4d\n", epoch[m]);
 	#endif
 
@@ -222,7 +233,7 @@ int IGRF_loadcoeffs(char *filename)
 		for (n=0; n<nyear; n++) {
 			fscanf(fp, "%lf", &coef);			/* coefficient */
 			IGRF_coef_set[n][k] = coef * Slm[k];		/* NORMALIZE */
-			#if DEBUG > 0
+			#if DEBUG > 1
 			fprintf(stderr, "%d %d %d %d %f\n", k, l, n, 0, IGRF_coef_set[n][k]);
 			#endif
 		}
@@ -238,7 +249,7 @@ int IGRF_loadcoeffs(char *filename)
 			for (n=0; n<nyear; n++) {
 				fscanf(fp, "%lf", &coef);			/* coefficient */
 				IGRF_coef_set[n][k] = coef * Slm[k];		/* NORMALIZE */
-				#if DEBUG > 0
+				#if DEBUG > 1
 				fprintf(stderr, "%d %d %d %d %f\n", k, l, n, m, IGRF_coef_set[n][k]);
 				#endif
 			}
@@ -252,7 +263,7 @@ int IGRF_loadcoeffs(char *filename)
 			for (n=0; n<nyear; n++) {
 				fscanf(fp, "%lf", &coef);			/* coefficient */
 				IGRF_coef_set[n][k] = coef * Slm[k];		/* NORMALIZE */
-				#if DEBUG > 0
+				#if DEBUG > 1
 				fprintf(stderr, "%d %d %d %d %f\n", k, l, n, -m, IGRF_coef_set[n][k]);
 				#endif
 			}
@@ -264,19 +275,19 @@ int IGRF_loadcoeffs(char *filename)
 			if (jnk == 13) fscanf(fp, "%c", &jnk);	/* <LF> */
 		}
 
-		#if DEBUG > 0
-		pause();
+		#if DEBUG > 2
+		igrf_pause();
 		#endif
 	}
 	fclose(fp);
 
-	#if DEBUG > 0
+	#if DEBUG > 1
 	for (n=0; n<nyear; n++)
 		fprintf(stderr, "%04d %f\n", epoch[n], IGRF_coef_set[n][0]);
-	pause();
+	igrf_pause();
 	#endif
 
-	#if DEBUG > 0
+	#if DEBUG > 1
 	fprintf(stderr, "%d\n", (2000-1900)/5);
 	/* print coefficients in order */
 	for (l=0; l<=IGRF_ORDER; l++) {
@@ -286,7 +297,7 @@ int IGRF_loadcoeffs(char *filename)
 											IGRF_coef_set[(1980-1900)/5][k]);
 		}
 	}
-	pause();
+	igrf_pause();
 	#endif
 
 	return (0);
@@ -334,7 +345,7 @@ int IGRF_loadcoeffs(char *filename)
 int IGRF_Plm(double theta, int order, double *plmval, double *dplmval) {
   int l,m,k,n,p;
   double a,b;				/* factors */
-	double st,ct,kfac;
+	double st,ct;
 
 	if (order > IGRF_ORDER) return (-1);
 
@@ -352,12 +363,12 @@ int IGRF_Plm(double theta, int order, double *plmval, double *dplmval) {
 		dplmval[k] = dplmval[n]*st + plmval[n]*ct;
 		*/
 		/* numerical recipies in C */
-//		a = 1-2*l;		/* reverse order to remove Condon-Shortley phase */
+		/* a = 1-2*l;*/		/* reverse order to remove Condon-Shortley phase */
 		a = 2*l-1;
     plmval[k]  = a*plmval[n]*st;
 		dplmval[k] = a*(dplmval[n]*st + plmval[n]*ct);
 
-		#if DEBUG > 0
+		#if DEBUG > 1
     printf("%2d %3d %e %e\n", l, k, plmval[k], dplmval[k]);
 		#endif
   }
@@ -392,7 +403,7 @@ int IGRF_Plm(double theta, int order, double *plmval, double *dplmval) {
       	plmval[k]  = (a*ct*plmval[n] - b*plmval[p])/(l-m);
       	dplmval[k] = (a*(ct*dplmval[n] - st*plmval[n]) - b*dplmval[p])/(l-m);
 			}
-			#if DEBUG > 0
+			#if DEBUG > 1
       printf("%2d %2d %3d %e %e\n", l, m, k, plmval[k], dplmval[k]);
 			#endif
     }
@@ -457,7 +468,7 @@ int IGRF_compute(const double rtp[], double brtp[]) {
 
 //	aor  = RE/r;			/* a/r, where RE = a */
 //	aor  = RE/rtp[0];			/* a/r, where RE = a */
-	aor = 1.d/rtp[0];		/* r is in units of RE to be consistent with geopack, */
+	aor = 1./rtp[0];		/* r is in units of RE to be consistent with geopack, */
 											/* we want RE/r */
 
 	//printf("aor = %lf\n", aor);
@@ -654,30 +665,35 @@ int IGRF_interpolate_coefs(void) {
 int IGRF_SetDateTime(int year, int month, int day,
 											int hour, int minute, int second)
 {
-	int err;
+	int err = 0;
 
 	/* load coefficients if not already loaded */
 	if (igrf_date.year < 0)
-		err = IGRF_loadcoeffs(IGRF_FILE);
+		err = IGRF_loadcoeffs();
 
 	if (err) return (err);
 
-	igrf_date.year   = year;
-	igrf_date.month  = month;
-	igrf_date.day    = day;
-	igrf_date.hour   = hour;
-	igrf_date.minute = minute;
-	igrf_date.second = second;
-	igrf_date.dayno  = dayno(year,month,day,&(igrf_date.daysinyear));
+	if (igrf_date.year != year || igrf_date.month != month ||
+			igrf_date.day != day || igrf_date.hour != hour ||
+			igrf_date.minute != minute || igrf_date.second != second) {
 
-	#if DEBUG > 0
-	printf("IGRF_SetDateTime\n");
-	printf("%03d: %04d%02d%02d %02d%02d:%02d\n",
-				igrf_date.dayno, igrf_date.year, igrf_date.month, igrf_date.day,
-				igrf_date.hour, igrf_date.minute, igrf_date.second);
-	#endif
+		igrf_date.year   = year;
+		igrf_date.month  = month;
+		igrf_date.day    = day;
+		igrf_date.hour   = hour;
+		igrf_date.minute = minute;
+		igrf_date.second = second;
+		igrf_date.dayno  = dayno(year,month,day,&(igrf_date.daysinyear));
 
-	err = IGRF_interpolate_coefs();
+		#if DEBUG > 0
+		printf("IGRF_SetDateTime\n");
+		printf("%03d: %04d%02d%02d %02d%02d:%02d\n",
+					igrf_date.dayno, igrf_date.year, igrf_date.month, igrf_date.day,
+					igrf_date.hour, igrf_date.minute, igrf_date.second);
+		#endif
+
+		err = IGRF_interpolate_coefs();
+	}
 
 	return (err);
 }
@@ -742,14 +758,14 @@ int IGRF_GetDateTime(int *year, int *month, int *day,
 int IGRF_SetNow(void)
 {
 	/* current time */
-	int err,dyno;
-	double fyear;
+	int err = 0;
+	int dyno;
 	time_t now;
 	struct tm *tm_now;
 
 	/* load coefficients if not already loaded */
 	if (igrf_date.year < 0)
-		err = IGRF_loadcoeffs(IGRF_FILE);
+		err = IGRF_loadcoeffs();
 
 	if (err) return (err);
 
@@ -1120,14 +1136,14 @@ int mag2geo(const double xyzm[], double xyzg[]) {
 int geod2geoc(double lat, double lon, double alt, double rtp[]) {
 
 	double a,b,f,a2,b2,st,ct,one,two,three,rho,cd,sd;
-	double r,theta,phi;
+	double r,theta;
 
-	a = 6378.1370d;							/* semi-major axis */
-	f = 1.d/298.257223563d;			/* flattening */
-	b = a*(1.d -f);							/* semi-minor axis */
+	a = 6378.1370;							/* semi-major axis */
+	f = 1./298.257223563;				/* flattening */
+	b = a*(1. -f);							/* semi-minor axis */
 	a2 = a*a;
 	b2 = b*b;
-	theta = (90.d -lat)*DTOR;	/* colatitude in radians   */
+	theta = (90. -lat)*DTOR;	/* colatitude in radians   */
 	st = sin(theta);
 	ct = cos(theta);
 	one = a2*st*st;
@@ -1175,22 +1191,22 @@ int plh2xyz(double lat, double lon, double alt, double rtp[])
 {
 	double a,b,f,ee,st,ct,sp,cp,N,Nac,x,y,z,r,t;
 
-	a = 6378.1370d;							/* semi-major axis */
-	f = 1.d/298.257223563d;			/* flattening */
-	b = a*(1.d -f);							/* semi-minor axis */
-  ee = (2.d - f) * f;
+	a = 6378.1370;							/* semi-major axis */
+	f = 1./298.257223563;				/* flattening */
+	b = a*(1. -f);							/* semi-minor axis */
+  ee = (2. - f) * f;
 
   st = sin(lat*DTOR);
   ct = cos(lat*DTOR);
   sp = sin(lon*DTOR);
   cp = cos(lon*DTOR);
 
-  N = a / sqrt(1.d - ee*st*st);
+  N = a / sqrt(1. - ee*st*st);
   Nac = (N + alt) * ct;
 
   x = Nac * cp;
   y = Nac * sp;
-  z = (N*(1.d - ee)+alt) * st;
+  z = (N*(1. - ee)+alt) * st;
 
   r = sqrt(Nac*Nac + z*z);
   t = acos(z/r);
@@ -1232,14 +1248,14 @@ int geoc2geod(double lat, double lon, double r, double llh[])
 	double a,f,b,ee,e4,aa, theta,phi, st,ct,sp,cp, x,y,z;
 	double k0i,pp,zeta,rho,s,rho3,t,u,v,w,kappa;
 
-  a = 6378.1370d;             /* semi-major axis */
-  f = 1.d/298.257223563d;     /* flattening */
-  b = a*(1.d -f);             /* semi-minor axis */
-  ee = (2.d - f) * f;
+  a = 6378.1370;             /* semi-major axis */
+  f = 1./298.257223563;     /* flattening */
+  b = a*(1. -f);             /* semi-minor axis */
+  ee = (2. - f) * f;
   e4 = ee*ee;
   aa = a*a;
 
-  theta = (90.d - lat)*DTOR;
+  theta = (90. - lat)*DTOR;
   phi   = lon * DTOR;
 
   st = sin(theta);
@@ -1251,21 +1267,21 @@ int geoc2geod(double lat, double lon, double r, double llh[])
   y = r*RE * st * sp;
   z = r*RE * ct;
 
-  k0i   = 1.d - ee;
+  k0i   = 1. - ee;
   pp    = x*x + y*y;
   zeta  = k0i*z*z/aa;
-  rho   = (pp/aa + zeta - e4)/6.d;
-  s     = e4*zeta*pp/(4.d*aa);
+  rho   = (pp/aa + zeta - e4)/6.;
+  s     = e4*zeta*pp/(4.*aa);
   rho3  = rho*rho*rho;
-  t     = pow(rho3 + s + sqrt(s*(s+2*rho3)), 1.d/3.d);
+  t     = pow(rho3 + s + sqrt(s*(s+2*rho3)), 1./3.);
   u     = rho + t + rho*rho/t;
   v     = sqrt(u*u + e4*zeta);
-  w     = ee*(u + v - zeta)/(2.d*v);
-  kappa = 1.d + ee*(sqrt(u+v+w*w) + w)/(u + v);
+  w     = ee*(u + v - zeta)/(2.*v);
+  kappa = 1. + ee*(sqrt(u+v+w*w) + w)/(u + v);
 
   llh[0] = atan2(z*kappa,sqrt(pp))/DTOR;
 	llh[1] = lon;
-	llh[2] = sqrt(pp + z*z*kappa*kappa)/ee * (1.d/kappa - k0i);
+	llh[2] = sqrt(pp + z*z*kappa*kappa)/ee * (1./kappa - k0i);
 
   return (0);
 }
@@ -1347,15 +1363,14 @@ int AACGM_v2_Newval(double xyz[], int idir, double ds, double k[]) {
 */
 
 int AACGM_v2_RK45(double xyz[], int idir, double *ds, double eps, int code) {
-	char ch;
 	int k;
-	double bmag,tmp,rr,delt;
+	double bmag,rr,delt;
 	double k1[3],k2[3],k3[3],k4[3],k5[3],k6[3], w1[3],w2[3];
 	double rtp[3], brtp[3], bxyz[3];
 	double xyztmp[3];
 
-//function test_aacgm_rk45, x,y,z, idir, ds, eps, noadapt=noadapt, $
-//					max_ds=max_ds, RRds=RRds
+/*function test_aacgm_rk45, x,y,z, idir, ds, eps, noadapt=noadapt, $
+ *					max_ds=max_ds, RRds=RRds*/
 
 /*
 	; if noadapt is set then just do straight RK4 and ds is spatial step size
@@ -1397,35 +1412,35 @@ int AACGM_v2_RK45(double xyz[], int idir, double *ds, double eps, int code) {
 		rr = eps+1;	/* just to get into the loop */
 		while (rr > eps) {
 			for (k=0;k<3;k++) k1[k] = (*ds)*idir*bxyz[k]/bmag;
-			for (k=0;k<3;k++) xyztmp[k] = xyz[k] + k1[k]/4.d;
+			for (k=0;k<3;k++) xyztmp[k] = xyz[k] + k1[k]/4.;
 			AACGM_v2_Newval(xyztmp,idir,*ds, k2);
-			for (k=0;k<3;k++) xyztmp[k] = xyz[k] + (3.d*k1[k] + 9.d*k2[k])/32.d;
+			for (k=0;k<3;k++) xyztmp[k] = xyz[k] + (3.*k1[k] + 9.*k2[k])/32.;
 			AACGM_v2_Newval(xyztmp,idir,*ds, k3);
-			for (k=0;k<3;k++) xyztmp[k] = xyz[k] + (1932.d*k1[k] - 7200.d*k2[k] +
-																							7296.d*k3[k])/2197.d;
+			for (k=0;k<3;k++) xyztmp[k] = xyz[k] + (1932.*k1[k] - 7200.*k2[k] +
+																							7296.*k3[k])/2197.;
 			AACGM_v2_Newval(xyztmp,idir,*ds, k4);
 			for (k=0;k<3;k++)
-				xyztmp[k] = xyz[k] + 439.d*k1[k]/216.d - 8.d*k2[k] +
-														3680.d*k3[k]/513.d - 845.d*k4[k]/4104.d;
+				xyztmp[k] = xyz[k] + 439.*k1[k]/216. - 8.*k2[k] +
+														3680.*k3[k]/513. - 845.*k4[k]/4104.;
 			AACGM_v2_Newval(xyztmp,idir,*ds, k5);
 			for (k=0;k<3;k++)
-				xyztmp[k] = xyz[k] - 8.d*k1[k]/27.d + 2.d*k2[k] - 3544.d*k3[k]/2565.d +
-														1859.d*k4[k]/4104.d - 11.d*k5[k]/40.d;
+				xyztmp[k] = xyz[k] - 8.*k1[k]/27. + 2.*k2[k] - 3544.*k3[k]/2565. +
+														1859.*k4[k]/4104. - 11.*k5[k]/40.;
 			AACGM_v2_Newval(xyztmp,idir,*ds, k6);
 
 			rr = 0.;
 			for (k=0;k<3;k++) {
-				w1[k] = xyz[k] + 25.d*k1[k]/216.d + 1408.d*k3[k]/2565.d +
-													2197.d*k4[k]/4104.d - k5[k]/5.d;
-				w2[k] = xyz[k] + 16.d*k1[k]/135.d + 6656.d*k3[k]/12825.d +
-													28561.d*k4[k]/56430.d - 9.d*k5[k]/50.d +
-													2.d*k6[k]/55.d;
+				w1[k] = xyz[k] + 25.*k1[k]/216. + 1408.*k3[k]/2565. +
+													2197.*k4[k]/4104. - k5[k]/5.;
+				w2[k] = xyz[k] + 16.*k1[k]/135. + 6656.*k3[k]/12825. +
+													28561.*k4[k]/56430. - 9.*k5[k]/50. +
+													2.*k6[k]/55.;
 				rr += (w1[k]-w2[k])*(w1[k]-w2[k]);
 			}
 			rr = sqrt(rr)/(*ds);
 
 			if (fabs(rr) > 1e-16) {
-				delt = 0.84d *pow(eps/rr,0.25d);	/* this formula sucks because I have
+				delt = 0.84 *pow(eps/rr,0.25);	/* this formula sucks because I have
 																							no it where it came from.
 																							Obviously it involves factors in
 																							the LTEs of the two methods, but

@@ -1,10 +1,17 @@
+#ifndef _IGRFLIB_
+#define _IGRFLIB_
 
 #define IGRF_FIRST_EPOCH 1900
 #define IGRF_LAST_EPOCH 2015
-#define IGRF_FILE "igrf12coeffs.txt"	/* current IGRF model */
+/* SGS using IGRF_COEFFS environment variable */
+/*#define IGRF_FILE "igrf12coeffs.txt"*/	/* current IGRF model */
 
 #ifndef RE
 #define RE     6371.2                 /* Earth Radius */
+#endif
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846 /* define M_PI if not already */
 #endif
 
 #define MAXSTR 200                    /* maximum string length */
@@ -18,8 +25,9 @@
 /* function prototypes */
 
 /* private functions */
-int igrf_loadcoeffs(char *filename);
-void pause(void);
+int IGRF_loadcoeffs(void);
+int IGRF_interpolate_coefs(void);
+void igrf_pause(void);
 void IGRF_msg_notime(void);
 
 /* public functions */
@@ -44,4 +52,6 @@ int geoc2geod(double lat, double lon, double r, double llh[]);
 
 int AACGM_v2_Newval(double xyz[], int idir, double ds, double k[]);
 int AACGM_v2_RK45(double xyz[], int idir, double *ds, double eps, int code);
+
+#endif
 

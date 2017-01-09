@@ -173,3 +173,19 @@ def map_geo_to_alt(datetime, lons, lats, alts, map_to_alts, Re = 6371.2):
 
     mlons, mlats = geo2aacgm(datetime, lons, lats, alts)
     return aacgm2geo(datetime, mlons, mlats, map_to_alts)
+
+def mlon2mlt(datetime, mlons):
+    """Computes magnetic local time (MLT) from datetime, MLON. MLAT has little effect (shepherd, 2014; shepherd, 2016)"""
+
+    import numpy as n
+
+    setDateTime(datetime)
+
+
+    if not isinstance(mlons, (n.ndarray, list, tuple)):
+        mlon = [mlons]
+
+    out_mlt = n.zeros(len(mlons))
+    for idx, mlon in enumerate(mlons):
+        out_mlt[idx] = aacgmlib_v2.MLTConvert_v2(datetime.year, datetime.month, datetime.day, datetime.hour, datetime.minute, datetime.second, mlon)
+    return out_mlt

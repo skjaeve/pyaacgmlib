@@ -18,6 +18,8 @@
 ;                    is not big enought on some 32-bit systems.
 ;                    Switched from NAN to HUGE_VAL for undefined result
 ; 20140918 SGS v1.0  change function names to _v2 for wider distribution
+; 20150810 SGS v1.1  added code to default to geodetic coordinates for inverse
+;                    transformation. This code was left out in the C version.
 ;
 ; Functions:
 ;
@@ -65,7 +67,7 @@ struct {
 	int second;
 	int dayno;
 	int daysinyear;
-} aacgm_date = {-1,-1,-1,-1,-1,-1,-1};
+} aacgm_date = {-1,-1,-1,-1,-1,-1,-1,-1};
 
 int myear = 0;				/* model year: 5-year epoch */
 double fyear = 0.;		/* floating point year */
@@ -80,10 +82,13 @@ struct {
   double coefs[AACGM_KMAX][NCOORD][POLYORD][NFLAG][2];	/* bracketing coefs */
 } sph_harm_model;
 
+/* SGS added for MSC compatibility */
+#ifndef complex
 struct complex {
 	double x;
 	double y;
 };
+#endif
 
 
 /*-----------------------------------------------------------------------------
@@ -388,7 +393,7 @@ void AACGM_v2_Alt2CGM(double r_height_in, double r_lat_alt, double *r_lat_adj)
 	#endif
 
 	/* Computing 2nd power */
-	r1 = cos(r_lat_alt*M_PI/180.);
+	r1 = cos(r_lat_alt*DTOR);
 	ra = r1 * r1;
 	if (ra < eps) ra = eps;
 
@@ -396,7 +401,7 @@ void AACGM_v2_Alt2CGM(double r_height_in, double r_lat_alt, double *r_lat_adj)
 	if (r0 < unim) r0 = unim;
   
 	r1 = acos(sqrt(1/r0));
-	*r_lat_adj = AACGM_v2_Sgn(r1, r_lat_alt)*180/M_PI;
+	*r_lat_adj = AACGM_v2_Sgn(r1, r_lat_alt)/DTOR;
 } 
 
 /*-----------------------------------------------------------------------------
@@ -446,7 +451,7 @@ int AACGM_v2_CGM2Alt(double r_height_in, double r_lat_in, double *r_lat_adj)
 	#endif
 
 	/* convert from AACGM to at-altitude coordinates */
-	r1 = cos(r_lat_in*M_PI/180.);
+	r1 = cos(r_lat_in*DTOR);
 	ra = (r_height_in/RE + 1)*(r1*r1);
 	if (ra > unim) {
 		ra = unim;
@@ -454,7 +459,7 @@ int AACGM_v2_CGM2Alt(double r_height_in, double r_lat_in, double *r_lat_adj)
 	}
 
 	r1 = acos(sqrt(ra));
-	*r_lat_adj = AACGM_v2_Sgn(r1,r_lat_in)*180/M_PI;
+	*r_lat_adj = AACGM_v2_Sgn(r1,r_lat_in)/DTOR;
 
 	return (error);
 }
@@ -543,7 +548,6 @@ int convert_geo_coord(double lat_in, double lon_in, double height_in,
 	double ztmp, fac;
 	double alt_var=0;
 	double lon_input=0;
-	double llh[3];
 
 	static double cint[AACGM_KMAX][NCOORD][NFLAG];
 
@@ -561,10 +565,12 @@ int convert_geo_coord(double lat_in, double lon_in, double height_in,
 	if ((code & TRACE) || (height_in > MAXALT && (code & ALLOWTRACE))) {
 		if (A2G & code) {		/* AACGM-v2 to geographic */
 			err = AACGM_v2_Trace_inv(lat_in,lon_in,height_in, lat_out,lon_out);
+
+			/* v2.3 moved to AACGM_v2_Convert
 			if ((code & GEOCENTRIC) == 0) {
 				geoc2geod(*lat_out,*lon_out,(RE+height_in)/RE, llh);
 				*lat_out = llh[0];
-			}
+			} */
 		} else {
 			err = AACGM_v2_Trace(lat_in,lon_in,height_in, lat_out,lon_out);
 		}
@@ -598,12 +604,13 @@ int convert_geo_coord(double lat_in, double lon_in, double height_in,
 														sph_harm_model.coef[j][i][3][flag]*alt_var_cu+
 														sph_harm_model.coef[j][i][4][flag]*alt_var_qu;
 				#if DEBUG > 10
-				printf("%lf %lf\n", cint[j][i][flag],
+				printf("%35.30lf %35.30lf\n", cint[j][i][flag],
 														sph_harm_model.coef[j][i][0][flag]);
 				#endif
 
 			}
 		}
+
 		height_old[flag] = height_in;
 	}
 	#if DEBUG > 1
@@ -616,15 +623,16 @@ int convert_geo_coord(double lat_in, double lon_in, double height_in,
 
 	x = y = z = 0;
 
-	lon_input = lon_in*M_PI/180.0;
+	lon_input = lon_in*DTOR;
 
-	if (flag == 0) colat_input = (90.-lat_in)*M_PI/180.0;
-	else {
+	if (flag == 0) {
+		colat_input = (90.-lat_in)*DTOR;
+	} else {
 		/* use intermediate "at-altitude" coordinates for inverse trans. */
 		i_err64 = AACGM_v2_CGM2Alt(height_in, lat_in, &lat_adj);
 
 		if (i_err64 != 0) return -64;
-		colat_input= (90. - lat_adj)*M_PI/180;
+		colat_input= (90. - lat_adj)*DTOR;
 	}
 
 	/* Compute the values of the spherical harmonic functions.
@@ -697,8 +705,14 @@ int convert_geo_coord(double lat_in, double lon_in, double height_in,
 	*/
 	colat_output = colat_temp;
 
-	*lat_out = (double) (90 - colat_output*180/M_PI);
-	*lon_out = (double) (lon_output*180/M_PI);
+	*lat_out = (double) (90. - colat_output/DTOR);
+	*lon_out = (double) (lon_output/DTOR);
+
+	/* v2.3 moved to AACGM_v2_Convert
+	if ((code & GEOCENTRIC) == 0 && (code & A2G)) {
+		geoc2geod(*lat_out,*lon_out,(RE+height_in)/RE, llh);
+		*lat_out = llh[0];
+	} */
 
 	return 0;
 } 
@@ -861,12 +875,13 @@ int AACGM_v2_LoadCoefs(int year)
 	#endif
 	/* default location of coefficient files */
 	strcpy(root,getenv("AACGM_v2_DAT_PREFIX"));  
-	if (strlen(root)==0) return -1;
+	if (strlen(root)==0) {
+		AACGM_v2_errmsg(2);
+		return -1;
+	}
 
 	if (year <= 0) return -1;
-//	if (year==0) year=DEFAULT_YEAR;
 	sprintf(yrstr,"%4.4d",year);  
-//	strcpy(fname,getenv("AACGM_DAT_PREFIX"));  
 
 	strcpy(fname,root);
 	strcat(fname,yrstr);
@@ -917,12 +932,33 @@ int AACGM_v2_LoadCoefs(int year)
 ;                       GEOCENTRIC  - assume inputs are geocentric w/ RE=6371.2
 ;
 ;     Output Arguments:  
-;       out_lat       - double precision output latitude in degrees
-;       out_lon       - double precision output longitude in degrees
-;       r             - double radial distance in Re (always = 1.0)
+;       out_lat       - output latitude in degrees
+;       out_lon       - output longitude in degrees
+;       r             - geocentric radial distance in Re
 ;
 ;     Return Value:
 ;       error code
+;
+;
+; NOTES:
+;
+;       All AACGM-v2 conversions are done in geocentric coordinates using a
+;           value of 6371.2 km for the Earth radius.
+;
+;       For G2A conversion inputs are geographic latitude, longitude and
+;           height (glat,glon,height), specified as either geocentric or
+;           geodetic (default). For geodetic inputs a conversion to geocentric
+;           coordinates is performed, which changes the values of
+;           glat,glon,height. The output is AACGM-v2 latitude, longitude and
+;           the geocentric radius (mlat,mlon,r) using the geocentric height
+;           in units of RE.
+;
+;        For A2G conversion inputs are AACGM-v2 latitude, longitude and the
+;            geocentric height (mlat,mlon,height). The latter can be obtained
+;            from the r output of the G2A conversion. The output is geographic
+;            latitude, longitude and height (glat,glon,height). If the
+;            gedodetic option is desired (default) a conversion of the outputs
+;            is performed, which changes the values of glat,glon,height.
 ;
 ;+-----------------------------------------------------------------------------
 */
@@ -933,6 +969,7 @@ int AACGM_v2_Convert(double in_lat, double in_lon, double height,
 	int err;
 	int order=10;		/* pass in so a lower order would be allowed? */
 	double rtp[3];
+	double llh[3];
 
 	#if DEBUG > 0
 	printf("AACGM_v2_Convert\n");
@@ -963,34 +1000,42 @@ int AACGM_v2_Convert(double in_lat, double in_lon, double height,
 		return -8;
 	}
 
-//	if (in_lon < 0) in_lon += 360.0;  
-//	if (in_lon > 180.0) in_lon -= 360.0;  
 	/* longitude out of bounds */
+/* SGS v2.3 removing requirement that longitude be -180 to 180. Does not seems
+ *          to matter and is inconsistent with IDL version: -180 to 180.
+
 	if ((in_lon < -180) || (in_lon > 180)) {
 		fprintf(stderr, "ERROR: longitude must be in the range -180 to 180 "
 										"degrees: %lf\n", in_lon);
 		return -16;
 	}
+ */
 
-//printf("%d %d %d %d\n",
-//			code, GEOCENTRIC, code & GEOCENTRIC, (code & GEOCENTRIC)==0);
+	/* if forward calculation (G2A) and input coordinates are given in geodetic
+     coordinates (default) then must first convert to geocentric coordinates */
 	if ((code & GEOCENTRIC) == 0 && (code & A2G) == 0) {
-//printf("GEODETIC\n");
-		/* coordinates are given in geodetic coordinates and must be converted */
-		geod2geoc(in_lat, in_lon, height, rtp);
-//printf("lat: %f %f\n", in_lat, 90.d - rtp[1]/DTOR);
-//printf("lon: %f %f\n", in_lon, rtp[2]/DTOR);
-//printf("alt: %f %f\n", height, (rtp[0]-1.d)*RE);
-//printf("\n");
+		geod2geoc(in_lat,in_lon,height, rtp);
 
 		/* modify lat/lon/alt to geocentric values */
-		in_lat = 90.d - rtp[1]/DTOR;
+		in_lat = 90. - rtp[1]/DTOR;
 		in_lon = rtp[2]/DTOR;
-		height = (rtp[0]-1.d)*RE;
+		height = (rtp[0]-1.)*RE;
 	}
 
+	/* all inputs are geocentric */
 	err = convert_geo_coord(in_lat,in_lon,height, out_lat,out_lon, code,order);
-	*r = 1.0;
+	/* all outputs are geocentric */
+
+	if ((code & A2G) == 0) {		/* forward: G2A */
+		*r = (height + RE)/RE;		/* geocentric radial distance in RE */
+	} else {										/* inverse: A2G */
+		if ((code & GEOCENTRIC) == 0) {	/* geodetic outputs */
+			geoc2geod(*out_lat,*out_lon,(RE+height)/RE, llh);
+			*out_lat = llh[0];
+			height = llh[2];
+		}
+		*r = height;							/* height in km */
+	}
 
 	if (err !=0) return -1;
 	return 0;
@@ -1172,7 +1217,6 @@ int AACGM_v2_SetNow(void)
 
 void AACGM_v2_errmsg(int ecode)
 {
-	char estr[100];
 
 	fprintf(stderr, "\n"
 	"**************************************************************************"
@@ -1206,6 +1250,14 @@ void AACGM_v2_errmsg(int ecode)
 	"* The current date range for AACGM-v2 coordinates is [1990-2020), which  *\n"
 	"* corresponds to the date range for the IGRF12 model, including the      *\n"
 	"* 5-year secular variation.                                              *"
+	"\n");
+		break;
+
+		case 2: /* COEF Path not set */
+	fprintf(stderr,
+	"* AACGM-v2 ERROR: AACGM_v2_DAT_PREFIX path not set *\n"
+	"*                                                                        *\n"
+	"* You must set the environment variable AACGM_v2_DAT_PREFIX to the       *\n"
 	"\n");
 		break;
 	}
@@ -1280,13 +1332,12 @@ int AACGM_v2_Trace(double lat_in, double lon_in, double alt,
 	double ds, dsRE, dsRE0, eps, Lshell;
 	double rtp[3],xyzg[3],xyzm[3],xyzc[3],xyzp[3];
 
-	// Q: will this load coefficients each time???
 	/* set date for IGRF model */
 	IGRF_SetDateTime(aacgm_date.year, aacgm_date.month, aacgm_date.day,
 										aacgm_date.hour, aacgm_date.minute, aacgm_date.second);
 
 	// Q: these could eventually be command-line options
-	ds    = 1.d;
+	ds    = 1.;
 	dsRE  = ds/RE;
 	dsRE0 = dsRE;
 	eps   = 1.e-4/RE;
@@ -1361,7 +1412,7 @@ int AACGM_v2_Trace(double lat_in, double lon_in, double alt,
 		geo2mag(xyzc, xyzm);  /* geographic to magnetic */
 		car2sph(xyzm, rtp);
 
-		*lat_out = -idir*acos(sqrt(1.d/Lshell))/DTOR;
+		*lat_out = -idir*acos(sqrt(1./Lshell))/DTOR;
 		*lon_out = rtp[2]/DTOR;
 		if (*lon_out > 180) *lon_out -= 360.;
 
@@ -1379,13 +1430,12 @@ int AACGM_v2_Trace_inv(double lat_in, double lon_in, double alt,
 	double ds, dsRE, dsRE0, eps, Lshell;
 	double rtp[3],xyzg[3],xyzm[3],xyzc[3],xyzp[3];
 
-	// Q: will this load coefficients each time???
 	/* set date for IGRF model */
 	IGRF_SetDateTime(aacgm_date.year, aacgm_date.month, aacgm_date.day,
 										aacgm_date.hour, aacgm_date.minute, aacgm_date.second);
 
 	// Q: these could eventually be command-line options
-	ds    = 1.d;
+	ds    = 1.;
 	dsRE  = ds/RE;
 	dsRE0 = dsRE;
 	eps   = 1.e-4/RE;
@@ -1395,7 +1445,7 @@ int AACGM_v2_Trace_inv(double lat_in, double lon_in, double alt,
 	if (fabs(fabs(lat_in) - 90.) < 1e-6)
 		lat_in += (lat_in > 0) ? -1e-6 : 1e-6;
 
-	Lshell = 1.d/(cos(lat_in*DTOR)*cos(lat_in*DTOR));
+	Lshell = 1./(cos(lat_in*DTOR)*cos(lat_in*DTOR));
 	if (Lshell <(RE+alt)/RE) { /* solution does not exist; the starting
 															* position at the magnetic equator is below
 															* the altitude of interest */
@@ -1406,7 +1456,7 @@ int AACGM_v2_Trace_inv(double lat_in, double lon_in, double alt,
 		/* magnetic Cartesian coordinates of fieldline trace starting point */
 		xyzm[0] = Lshell*cos(lon_in*DTOR);
 		xyzm[1] = Lshell*sin(lon_in*DTOR);
-		xyzm[2] = 0.d;
+		xyzm[2] = 0.;
 
 		/* geographic Cartesian coordinates of starting point */
 		mag2geo(xyzm, xyzg);
@@ -1452,7 +1502,7 @@ int AACGM_v2_Trace_inv(double lat_in, double lon_in, double alt,
 			niter += kk;
 		}
 
-		*lat_out = 90.d - rtp[1]/DTOR;
+		*lat_out = 90. - rtp[1]/DTOR;
 		*lon_out = rtp[2]/DTOR;
 		if (*lon_out > 180) *lon_out -= 360.;
 		err = 0;

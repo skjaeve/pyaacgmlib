@@ -1,0 +1,50 @@
+
+v2.3 Changes 20160427
+
++ Removed requirement that longitude be [-180,180]. Does not seem to matter
+  and was inconsistent with IDL [0,360]
+
++ Removed all .d refences to indicate double precision numeric values.
+  Not compatible with some compilers, i.e., MSC and Mac(?).
+
++ #define M_PI if not already defined in aacgmlib_v2.h and igrflib.h
+
++ Added missing prototypes in igrflib.h
+
++ Added definition for NAN and protected definition of complex for MSC
+  compatibility
+
++ Added environment variable IGRF_COEFFS instead of #define and assumption
+  that file is in current directory.
+
++ Added MLT functionality:
+           mlt = MLTConvertYMDHMS_v2()
+           mlt = MLTConvertEpoch_v2()
+           mlt = MLTConvertYrsec_v2()
+
+  requires additional files: mlt_v2.c, astalg.c, and time.c
+
++ Made the radial output of AACGM-v2 conversions more meaningful. Previously r 
+  was always set to 1.0. The following excerpt describes what this parameter is
+  now set to. Note that the other outputs (lat,lon) remain unchanged.
+
+
+;       All AACGM-v2 conversions are done in geocentric coordinates using a
+;           value of 6371.2 km for the Earth radius.
+;
+;       For G2A conversion inputs are geographic latitude, longitude and
+;           height (glat,glon,height), specified as either geocentric or
+;           geodetic (default). For geodetic inputs a conversion to geocentric
+;           coordinates is performed, which changes the values of
+;           glat,glon,height. The output is AACGM-v2 latitude, longitude and
+;           the geocentric radius (mlat,mlon,r) using the geocentric height
+;           in units of RE.
+;
+;        For A2G conversion inputs are AACGM-v2 latitude, longitude and the
+;            geocentric height (mlat,mlon,height). The latter can be obtained
+;            from the r output of the G2A conversion. The output is geographic
+;            latitude, longitude and height (glat,glon,height). If the
+;            gedodetic option is desired (default) a conversion of the outputs
+;            is performed, which changes the values of glat,glon,height.
+
+

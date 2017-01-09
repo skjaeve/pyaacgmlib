@@ -1,20 +1,19 @@
 # AACGM python wrapper
 
-This is a Python wrapper for the Altitude Adjusted Corrected
-Geomagnetic Coordinates (AACGM) C implementation found at
-https://engineering.dartmouth.edu/superdarn/aacgm.html. License is
-undetermined, please assume same as the C code found at above URL if
-possible.  The C code and coefficient files (version 20140918) are
-duplicated in this repository, but please check the source for more
-updated versions.
+This is a Python wrapper for the Altitude Adjusted Corrected Geomagnetic
+Coordinates (AACGM) v2 C implementation found at
+https://engineering.dartmouth.edu/superdarn/aacgm.html. License is assumed to be GPL v3; se below.
+The C code and coefficient files (version 20160505 code/20150207 coeffs) are
+duplicated in this repository, but please check the source for more updated
+versions.
 
-The wrappers should work in Python 2.7 and Python 3.4. Haven't tested
-other versions.
+The wrappers should work in Python 2.7 and Python 3.4 and 3.5.
+
 
 ## Installation
 
 Install SWIG if you don't already have it, and the headers for the
-Python version you're compiling for, for example
+Python version you're compiling for, for example (Ubuntu/Debian)
 
     sudo aptitude install swig python-dev python3-dev
 
@@ -58,3 +57,14 @@ that's what the wrapper code uses.
 Other functions: _setNow()_, _setDateTime(**datetime**)_,
 _getDateTime()_ exist but aren't really needed, unless you're going to
 bypass the wrapper functions and use the C functions directly.
+
+
+
+# License
+
+Short story: GPL v3.
+
+Long story:
+Version 2.3 of the AACGMv2 C code includes the AstAlg library, which is licensed under GPL v2 or later. The magnetic local time (MLT) code uses the AstAlg code. Since I wrap the MLT functions, my code is automatically GPL.
+Older versions of the AACGMv2 code (without MLT) didn't have an explicit license, so I simply assume that it had an implicit GPL-compatible license.
+The time.c/h files refer to a different license file which I haven't been able to find.
